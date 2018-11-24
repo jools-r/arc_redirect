@@ -22,7 +22,7 @@ if (!defined('txpinterface'))
 # --- BEGIN PLUGIN CODE ---
 register_callback('arc_redirect_install','plugin_lifecycle.arc_redirect', 'installed');
 register_callback('arc_redirect_uninstall','plugin_lifecycle.arc_redirect', 'deleted');
-register_callback('arc_redirect', ''pretext_end');
+register_callback('arc_redirect', 'pretext_end');
 add_privs('arc_redirect', '1,2,3,4');
 register_tab('extensions', 'arc_redirect', 'arc_redirect');
 register_callback('arc_redirect_tab', 'arc_redirect');
