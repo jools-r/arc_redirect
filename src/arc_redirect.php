@@ -48,19 +48,7 @@ function arc_redirect($event, $step)
 
 	if (isset($redirect['redirectUrl']))
 	{
-		ob_end_clean();
-
-		$status = 'HTTP/1.0 ';
-		$status .= $redirect['statusCode']==301 ? '301 Moved Permanently' : '302 Moved Temporarily';
-
-		header("Status: {$redirect['statusCode']}");
-		header($status);
-		header('Location: ' . $redirect['redirectUrl'], TRUE, $redirect['statusCode']);
-
-		// In case the header() method fails, fall back on a classic redirect
-		echo '<html><head><meta http-equiv="Refresh" content="0;URL='
-			. $redirect['redirectUrl'] . '"></head><body></body></html>';
-		die();
+		txp_die('', $redirect['statusCode'], $redirect['redirectUrl']);
 	}
 
 	return;
