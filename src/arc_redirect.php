@@ -41,7 +41,7 @@ function arc_redirect($event, $step)
 	$fullUrl = rtrim(hu, '/') . $url;
 
 	$redirect = safe_row(
-		'redirectUrl',
+		'redirectUrl, statusCode',
 		'arc_redirect',
 		"originalUrl = '$url' OR originalUrl = '$fullUrl' ORDER BY CHAR_LENGTH(originalUrl) DESC, arc_redirectID DESC"
 	);
