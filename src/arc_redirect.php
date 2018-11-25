@@ -17,7 +17,7 @@ if (!defined('PLUGIN_LIFECYCLE_NOTIFY')) define('PLUGIN_LIFECYCLE_NOTIFY', 0x000
 $plugin['flags'] = '2';
 
 if (!defined('txpinterface'))
-				@include_once('zem_tpl.php');
+    @include_once('zem_tpl.php');
 
 # --- BEGIN PLUGIN CODE ---
 register_callback('arc_redirect_install','plugin_lifecycle.arc_redirect', 'installed');
@@ -27,9 +27,12 @@ add_privs('arc_redirect', '1,2,3,4');
 register_tab('extensions', 'arc_redirect', 'arc_redirect');
 register_callback('arc_redirect_tab', 'arc_redirect');
 
+use Textpattern\Search\Filter;
+
 /*
- * Check for redirected URLs and forward with a 301 where necessary.
+ * Check for redirected URLs and forward with a 301 or 302.
  */
+ 
 function arc_redirect($event, $step)
 {
 	global $pretext;
@@ -38,7 +41,7 @@ function arc_redirect($event, $step)
 	$url = doSlash(rtrim($url['path'], '/'));
 
 	// full URL including the protocol and domain
-	$fullUrl = rtrim(hu, '/') . $url;
+	$fullUrl = hu . ltrim($url, '/');
 
 	$redirect = safe_row(
 		'redirectUrl, statusCode',
@@ -55,109 +58,228 @@ function arc_redirect($event, $step)
 
 }
 
+
+/**
+ * Redirects panel.
+ *
+ * @package Extensions\Redirect
+ */
+ 
 function arc_redirect_tab($event, $step) {
+
 	switch ($step) {
 		case 'add': arc_redirect_add(); break;
 		case 'save': arc_redirect_save(); break;
 		case 'edit': arc_redirect_edit(); break;
-		case 'arc_redirect_multiedit': arc_redirect_multiedit(); break;
+		case 'arc_redirect_multi_edit': arc_redirect_multi_edit(); break;
+		case 'arc_redirect_change_pageby': arc_redirect_change_pageby(); break;
 		default: arc_redirect_list();
 	}
 }
+
+
+/**
+ * The main panel listing all redirects.
+ *
+ * @param string|array $message The activity message
+ */
 
 function arc_redirect_list($message = '')
 {
 	global $event;
 
-	extract(gpsa(array('page')));
+	pagetop('tab_arc_redirect',$message);
 
-	pagetop('arc_redirect',$message);
+	extract(gpsa(array(
+		'page',
+		'sort',
+		'dir',
+		'crit',
+		'search_method',
+	)));
 
-	$criteria = 1;
-
-	$total = getCount('arc_redirect', $criteria);
-
-	$limit = 25;
-	list($page, $offset, $numPages) = pager($total, $limit, $page);
-
-	$sort_sql = 'arc_redirectID desc';
-
-	$rs = safe_rows_start('*', 'arc_redirect', "$criteria order by $sort_sql limit $offset, $limit");
-
-	$statusCodes = array(
-		301 => 'Permanent',
-		302 => 'Temporary'
-	);
-
-	$html = '<h1 class="txp-heading">arc_redirect</h1>';
-	// Include a quick add form
-	$form = '<p><span class="edit-label"><label for="originalUrl">Redirect from URL (produces 404 page)</label></span>';
-	$form .= '<span class="edit-value">' . fInput('text', 'originalUrl', '', '', '', '', '', '', 'originalUrl') . '</span></p>';
-	$form .= '<p><span class="edit-label"><label for="redirectUrl">Redirect to URL</label></span>';
-	$form .= '<span class="edit-value">' . fInput('text', 'redirectUrl', '', '', '', '', '', '', 'redirectUrl') . '</span></p>';
-	$form .= '<p><span class="edit-label"><label for="statusCode">Redirect Type</label></span>';
-	$form .= '<span class="edit-value"><select name="statusCode">' . type_options($statusCodes) . '</select>&nbsp;' . fInput('submit', 'add', gTxt('Add')) . '</span></p>';
-
-	$form .= eInput('arc_redirect').sInput('add');
-	$html .= form('<div class="plugin-column">' . $form . '</div>', '', '', 'post', 'edit-form');
-
-	// Add a list of existing redirects
-	$html .= n . n . '<form action="index.php" id="arc_redirect_form" class="multi_edit_form" method="post" name="longform">';
-	$html .= startTable(null, null, 'txp-list');
-
-	$html .= '<thead>' . tr(
-		hCell(
-			fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'),
-			'',
-			' title="Toggle all/none selected" class="multi-edit"'
-		)
-		. hCell('ID#')
-		. hCell('Original URL')
-		. hCell('Redirect URL')
-		. hCell('Type')
-		. hCell('Manage')
-	) . '</thead>';
-
-	while ($redirect = nextRow($rs))
-	{
-		$editLink = href(
-			gTxt('edit'),
-			'?event=arc_redirect&amp;step=edit&amp;id=' . $redirect['arc_redirectID']
-		);
-		$testUrl = $redirect['originalUrl'];
-		if (strpos($testUrl, '/') === 0) {
-		    $testUrl = hu.(ltrim($testUrl, '/'));
+	if ($sort === '') {
+		$sort = get_pref('arc_redirect_sort_column', 'arc_redirectID');
+	} else {
+		if (!in_array($sort, array('arc_redirectID', 'originalUrl', 'redirectUrl', 'statusCode'))) {
+			$sort = 'arc_redirectID';
 		}
-		$redirectLink = href('Test', $testUrl);
-		$html .= tr(
-			td(fInput('checkbox', 'selected[]', $redirect['arc_redirectID']), '', 'multi-edit')
-			. td($redirect['arc_redirectID'], 20, 'id')
-			. td(htmlspecialchars($redirect['originalUrl']), 175)
-			. td(htmlspecialchars($redirect['redirectUrl']), 175)
-			. td($redirect['statusCode']==301 ? 'Permanent' : 'Temporary', 175)
-			. td("$editLink <span> | </span> $redirectLink", 35, 'manage')
-		);
+
+		set_pref('arc_redirect_sort_column', $sort, 'arc_redirect', PREF_HIDDEN, '', 0, PREF_PRIVATE);
 	}
 
-	$html .= endTable();
+	if ($dir === '') {
+		$dir = get_pref('arc_redirect_sort_dir', 'asc');
+	} else {
+		$dir = ($dir == 'desc') ? "desc" : "asc";
+		set_pref('arc_redirect_sort_dir', $dir, 'arc_redirect', PREF_HIDDEN, '', 0, PREF_PRIVATE);
+	}
 
-	$methods = array(
-		'delete' => gTxt('delete')
+	$sort_sql = "$sort $dir";
+	$switch_dir = ($dir == 'desc') ? 'asc' : 'desc';
+
+	$search = new Filter($event,
+		array(
+			'arc_redirectID' => array(
+				'column' => 'arc_redirect.arc_redirectID',
+				'label'  => gTxt('id'),
+			),
+			'originalUrl' => array(
+				'column' => 'arc_redirect.originalUrl',
+				'label'  => gTxt('arc_original_url'),
+			),
+			'redirectUrl' => array(
+				'column' => 'arc_redirect.redirectUrl',
+				'label'  => gTxt('arc_redirect_url'),
+			),
+			'statusCode' => array(
+				'column' => 'arc_redirect.statusCode',
+				'label'  => gTxt('type'),
+			),
+		)
 	);
 
-	$html .= multi_edit($methods, 'arc_redirect', 'arc_redirect_multiedit');
+	$alias_permanent = '301, Permanent';
+	$alias_temporary = '302, Temporary';
+	$search->setAliases('statusCode', array($alias_permanent, $alias_temporary));
 
-	$html .= '</form>';
+	list($criteria, $crit, $search_method) = $search->getFilter();
 
-	$html .= n . '<div id="'.$event.'_navigation" class="txp-navigation">'
-		. n . nav_form('arc_redirect', $page, $numPages, '', '', '', '', $total, $limit)
-		. n . '</div>';
+	$search_render_options = array('placeholder' => gTxt('search_redirects'));
+	$total = safe_count('arc_redirect', $criteria);
 
-	echo $html;
+	$searchBlock =
+		n.tag(
+			$search->renderForm('arc_redirect', $search_render_options),
+			'div', array(
+				'class' => 'txp-layout-4col-3span',
+				'id'	=> $event.'_control',
+			)
+		);
 
-	return;
+	$createBlock  = tag(arc_redirect_form(''), 'div', array('class' => 'txp-control-panel', 'style' => 'width: 100%'));
+	$contentBlock = '';
+    
+	$paginator = new \Textpattern\Admin\Paginator($event, 'arc_redirect');
+	$limit = $paginator->getLimit();
+
+	list($page, $offset, $numPages) = pager($total, $limit, $page);
+
+	if ($total < 1) {
+        if ($criteria != 1) {
+    		$contentBlock .= graf(
+    			span(null, array('class' => 'ui-icon ui-icon-info')).' '.
+    			gTxt('no_results_found'),
+    			array('class' => 'alert-block information')
+    		);
+        }
+	} else {
+		$rs = safe_rows_start(
+			"arc_redirectID, originalUrl, redirectUrl, statusCode", 
+			'arc_redirect', 
+			"$criteria ORDER BY $sort_sql LIMIT $offset, $limit"
+		);
+
+		$contentBlock .= 
+			n.tag_start('form', array(
+				'class'  => 'multi_edit_form',
+				'id'	 => 'arc_redirect_form',
+				'name'   => 'longform',
+				'method' => 'post',
+				'action' => 'index.php',
+			)).
+			n.tag_start('div', array('class' => 'txp-listtables')).
+			n.tag_start('table', array('class' => 'txp-list')).
+			n.tag_start('thead').
+			tr(
+				hCell(
+					fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'),
+						'', ' class="txp-list-col-multi-edit" scope="col" title="'.gTxt('toggle_all_selected').'"'
+				).
+				column_head(
+					gTxt('id'), 'arc_redirectID', 'arc_redirect', true, $switch_dir, '', '',
+						(('arc_redirectID' == $sort) ? "$dir " : '').'txp-list-col-id'
+				).
+				column_head(
+					gTxt('arc_original_url'), 'originalUrl', 'arc_redirect', true, $switch_dir, '', '',
+						(('originalUrl' == $sort) ? "$dir " : '').'txp-list-col-originalurl'
+				).
+				column_head(
+					gTxt('arc_redirect_url'), 'redirectUrl', 'arc_redirect', true, $switch_dir, '', '',
+						(('redirectUrl' == $sort) ? "$dir " : '').'txp-list-col-redirecturl'
+				).
+				column_head(
+					gTxt('type'), 'statusCode', 'arc_redirect', true, $switch_dir, '', '',
+						(('statusCode' == $sort) ? "$dir " : '').'txp-list-col-type'
+				).
+				hCell(
+					gTxt('manage'), '', ' class="txp-list-col-manage" scope="col"'
+				)
+			).
+			n.tag_end('thead').
+			n.tag_start('tbody');
+
+		while ($a = nextRow($rs)) {
+			extract($a, EXTR_PREFIX_ALL, 'redirect');
+
+			$edit_url = eLink('arc_redirect', 'edit', 'id', $redirect_arc_redirectID, gTxt('edit'));
+
+			$test_url = $redirect_originalUrl;
+			if (strpos($test_url, '/') === 0) {
+				$test_url = hu . ltrim($test_url, '/');
+			}
+			$redirect_url = href(gTxt('test_redirect'), $test_url, ' rel="external" target="_blank"');
+
+			$contentBlock .= tr(
+				td(
+					fInput('checkbox', 'selected[]', $redirect_arc_redirectID), '', 'txp-list-col-multi-edit'
+				).
+				hCell(
+					$redirect_arc_redirectID, '', ' class="txp-list-col-id" scope="row"'
+				).
+				td(
+					txpspecialchars($redirect_originalUrl), '', 'txp-list-col-originalurl'
+				).
+				td(
+					txpspecialchars($redirect_redirectUrl), '', 'txp-list-col-redirecturl'
+				).
+				td(
+					$redirect_statusCode == 301 ? gTxt('redirect_permanent') : gTxt('redirect_temporary'), '', 'txp-list-col-type'
+				).
+				td(
+					"$edit_url <span> | </span> $redirect_url", '', 'txp-list-col-manage'
+				)
+			);
+            unset($redirect_arc_redirectID);
+		}
+
+		$methods = array(
+			'delete' => gTxt('delete')
+		);
+
+		$contentBlock .= n.tag_end('tbody').
+			n.tag_end('table').
+			n.tag_end('div').
+			multi_edit($methods, 'arc_redirect', 'arc_redirect_multi_edit').
+			tInput().
+			n.tag_end('form');
+
+		$pageBlock = $paginator->render().
+		nav_form('arc_redirect', $page, $numPages, $sort, $dir, $crit, $search_method, $total, $limit);
+
+		$table = new \Textpattern\Admin\Table($event);
+		echo $table->render(compact('total', 'criteria') + array('heading' => 'tab_arc_redirect'), $searchBlock, $createBlock, $contentBlock, $pageBlock);
+
+	}
 
 }
+
+
+/**
+ * Edit redirect.
+ *
+ * @param string|array $message The activity message
+ */
 
 function arc_redirect_edit($message='')
 {
@@ -167,45 +289,20 @@ function arc_redirect_edit($message='')
 	$redirectUrl = gps('redirectUrl');
 	$statusCode = gps('statusCode');
 
-	if ($id=gps('id')) {
+	if ($id = gps('id')) {
 		$id = doSlash($id);
-		$rs = safe_row('originalUrl,redirectUrl,statusCode', 'arc_redirect', "arc_redirectID = $id");
+		$rs = safe_row('originalUrl, redirectUrl, statusCode', 'arc_redirect', "arc_redirectID = $id");
 		extract($rs);
 	}
 
-	$statusCodes = array(
-		301 => 'Permanent',
-		302 => 'Temporary'
-	);
-
-	$html = '<h1 class="txp-heading">arc_redirect</h1>';
-	$form = '<h2>' . ($id ? 'Edit' : 'Add') . ' Redirect</h2>';
-	$fields = array(
-		'originalUrl' => 'Redirect from URL',
-		'redirectUrl' => 'Redirect to URL'
-	);
-	foreach ($fields as $key => $label)
-	{
-		$form .= '<p class="' . $key . '"><span class="edit-label"><label for="$key">' . $label . '</label></span>';
-		$form .= '<span class="edit-value">' . fInput('text', $key, $$key, '', '', '', '', '', $key) . '</span>';
-		$form .= '</p>';
-	}
-	$form .= '<p class="statusCode"><span class="edit-label"><label for="statusCode">Redirect Type</label></span>';
-	$form .= selectInput('statusCode', $statusCodes, $statusCode);
-	$form .= '</p>';
-	$form .= eInput('arc_redirect');
-	$form .= '<p>';
-	if ($id) {
-		$form .= sInput('save').hInput('id',$id).fInput('submit','save',gTxt('Save'),'publish');
-	} else {
-		$form .= sInput('add').fInput('submit','add',gTxt('Add'),'publish');
-	}
-	$form .= '</p>';
-	$html .= form('<div class="plugin-column"><div class="txp-edit">' . $form . '</div></div>', '', '', 'post', 'edit-form');
-
-	echo $html;
-
+	echo hed(gTxt('tab_arc_redirect'), 1, array('class' => 'txp-heading')).
+         arc_redirect_form($id, $originalUrl, $redirectUrl, $statusCode);
 }
+
+
+/**
+ * Add redirect.
+ */
 
 function arc_redirect_add()
 {
@@ -214,7 +311,7 @@ function arc_redirect_add()
 
 	if ($originalUrl === '' || $redirectUrl === '')
 	{
-		arc_redirect_edit('Unable to add new redirect');
+		arc_redirect_edit(gTxt('error_details_incomplete'));
 		return;
 	}
 
@@ -230,18 +327,23 @@ function arc_redirect_add()
 
 	if ($q)
 	{
-		$message = gTxt('Redirect added');
+		$message = gTxt('redirect_added');
 		arc_redirect_list($message);
 	}
 
 	return;
 }
 
+
+/**
+ * Saves redirect.
+ */
+
 function arc_redirect_save()
 {
 	if (!$id=ps('id'))
 	{
-		arc_redirect_list('Unable to save redirect');
+		arc_redirect_list(gTxt('error_details_incomplete_no_id'));
 		return;
 	}
 
@@ -251,7 +353,7 @@ function arc_redirect_save()
 
 	if ($originalUrl == '' || $redirectUrl == '' || empty($statusCode))
 	{
-		arc_redirect_edit('Unable to save redirect');
+		arc_redirect_edit(gTxt('error_details_incomplete'));
 		return;
 	}
 
@@ -262,19 +364,24 @@ function arc_redirect_save()
 
 	$rs = safe_update(
 		"arc_redirect",
-		"originalUrl    = '" . trim(doSlash($originalUrl)) . "',  redirectUrl = '" . trim(doSlash($redirectUrl)) . "',  statusCode = " . trim(doSlash($statusCode)) . "",
+		"originalUrl	= '" . trim(doSlash($originalUrl)) . "',  redirectUrl = '" . trim(doSlash($redirectUrl)) . "',  statusCode = " . trim(doSlash($statusCode)) . "",
 		"arc_redirectID = $id"
 	);
 
 	if ($rs)
 	{
-		$message = gTxt('Redirect updated');
+		$message = gTxt('redirect_updated');
 		arc_redirect_list($message);
 	}
 	return;
 }
 
-function arc_redirect_multiedit() {
+
+/**
+ * Processes multi-edit actions.
+ */
+
+function arc_redirect_multi_edit() {
 	$selected = ps('selected');
 
 	if (!$selected || !is_array($selected)) {
@@ -296,46 +403,127 @@ function arc_redirect_multiedit() {
 					$changed[] = $id;
 				}
 			}
-			$message = count($changed).' redirects deleted';
+			$num = count($changed);
+			if ($num > 1) {
+				$message = $num . ' ' . gTxt('redirects_deleted');
+			} else {
+				$message = gTxt('redirect_deleted');
+			}
+			
 			break;
 	}
 
 	arc_redirect_list($message);
 }
 
-// Installation function - builds MySQL table
-function arc_redirect_install()
+
+/**
+ * Updates pageby value.
+ */
+
+function arc_redirect_change_pageby()
 {
+	global $event;
 
-	// For first install, create table for redirects
-	$sql = 'CREATE TABLE IF NOT EXISTS '.PFX.'arc_redirect ';
-	$sql .= '(arc_redirectID INTEGER AUTO_INCREMENT PRIMARY KEY,
-		originalUrl VARCHAR(255),
-		redirectUrl VARCHAR(255));';
-
-	if (!safe_query($sql))
-	{
-		return 'Error - unable to create arc_redirect table';
-	}
-
-	if (!in_array('statusCode', getThings('DESCRIBE ' . safe_pfx('arc_redirect'))))
-	{
-		safe_alter('arc_redirect', 'ADD statusCode INT NOT NULL DEFAULT \'301\'');
-	}
-
-	return;
-
+	Txp::get('\Textpattern\Admin\Paginator', $event, 'arc_redirect')->change();
+	arc_redirect_list();
 }
 
-// Uninstall function - deletes MySQL table and related preferences
+
+/**
+ * Renders an add a redirect form.
+ *
+ * @return string HTML
+ * @access private
+ * @see	form()
+ */
+
+ function arc_redirect_form($id = '', $originalUrl = '', $redirectUrl = '', $statusCode = '')
+ {        
+     // bump back if non-existent ID specified
+     if ($id) {
+         $rs = safe_row('arc_redirectID', 'arc_redirect', "arc_redirectID = $id");
+         if (!$rs) {
+            arc_redirect_list(gTxt('error_no_such_redirect_id'));
+     		return;
+         }
+     }
+     
+     // 'edit' or 'add' operation
+     $action = ($id != '') ? 'save' : 'add';
+
+     $statusCodes = array(
+ 		301 => gTxt('redirect_permanent'),
+ 		302 => gTxt('redirect_temporary')
+ 	);
+
+ 	return form(
+ 		(($action == "add") ? hed(gTxt('add_new_redirect'), 2) : hed(gTxt('edit_redirect'), 2)).
+ 		inputLabel(
+ 			'originalUrl',
+ 			fInput('text', 'originalUrl', $originalUrl, '', '', '', INPUT_REGULAR, '', 'originalUrl'),
+ 			gTxt('arc_original_url'), '', array('class' => 'txp-form-field input-original-url')
+ 		).
+ 		inputLabel(
+ 			'redirectUrl',
+ 			fInput('text', 'redirectUrl', $redirectUrl, '', '', '', INPUT_REGULAR, '', 'redirectUrl'),
+ 			gTxt('arc_redirect_url'), '', array('class' => 'txp-form-field input-redirect-url')
+ 		).
+ 		inputLabel(
+ 			'statusCode',
+ 			selectInput('statusCode', $statusCodes, $statusCode),
+ 			gTxt('redirect_type'), '', array('class' => 'txp-form-field set-status-code')
+ 		).
+ 		graf(
+ 			fInput('submit', $action, gTxt($action), 'publish'),
+ 			array('class' => 'txp-edit-actions', 'style' => 'text-align: left')
+ 		).
+ 		eInput('arc_redirect').
+ 		(($id != '') ? hInput('id',$id) : '').
+ 		sInput($action),
+ 		'display:block; margin-left: 0;', '', 'post', 'txp-edit', '', 'arc_redirect_details'
+ 	);
+
+ }
+
+
+/**
+ * Installation function – builds MySQL table.
+ */
+
+function arc_redirect_install()
+{
+	// Create the arc_redirect table if it does not already exist
+    safe_create('arc_redirect', '
+        arc_redirectID  INT          NOT NULL AUTO_INCREMENT,
+        originalUrl     VARCHAR(255) NOT NULL,
+        redirectUrl     VARCHAR(255) NOT NULL,
+        statusCode      INT          NOT NULL DEFAULT \'301\',
+        PRIMARY KEY (arc_redirectID)
+    ');
+	
+	// Add 'statusCode' column to an existing legacy 'arc_redirect' table
+    if (!getRows("SHOW COLUMNS FROM ".safe_pfx('arc_redirect')." LIKE 'statusCode'")) {
+        safe_alter(
+            'arc_redirect',
+            "statusCode INT NOT NULL DEFAULT \'301\'"
+        );
+    }
+
+	return;
+}
+
+
+/**
+ * Uninstall function – deletes MySQL table and related preferences.
+ */
 
 function arc_redirect_uninstall()
 {
-	$sql = "DROP TABLE IF EXISTS ".PFX."arc_redirect;";
-	if (!safe_query($sql))
-	{
-		return 'Error - unable to delete arc_redirect table';
-	}
+	// Drop the arc_redirect table
+    safe_drop("arc_redirect");
+    // Remove arc_redirect prefs
+    safe_delete('txp_prefs', 'event = "arc_redirect"');
 }
 # --- END PLUGIN CODE ---
 if (0) {
