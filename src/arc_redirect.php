@@ -16,6 +16,53 @@ if (!defined('PLUGIN_LIFECYCLE_NOTIFY')) define('PLUGIN_LIFECYCLE_NOTIFY', 0x000
 
 $plugin['flags'] = '2';
 
+// Plugin 'textpack' is optional. It provides i18n strings to be used in conjunction with gTxt().
+$plugin['textpack'] = <<< EOT
+#@arc_redirect
+#@language en
+arc_redirect => Redirects
+tab_arc_redirect => Redirects
+arc_original_url => Original URL
+arc_redirect_url => Redirect URL
+redirect_type => Redirect type
+redirect_permanent => Permanent
+redirect_temporary => Temporary
+search_redirects => Search redirects
+no_redirects_founded => No redirects found
+redirect_added => Redirect added
+redirect_updated => Redirect updated
+add_new_redirect => Add new redirect
+edit_redirect => Edit redirect
+redirect_deleted => Redirect deleted
+redirects_deleted => redirects deleted
+error_details_incomplete_no_id => No ID# specified – unable to save redirect
+error_details_incomplete => Some details are missing – unable to save redirect
+error_no_such_redirect_id => A redirect with that ID# does not exist. Please try again.
+test_redirect => Test
+#@language de-de
+arc_redirect => Weiterleitungen
+tab_arc_redirect => Weiterleitungen
+arc_original_url => Von URL
+arc_redirect_url => Ziel URL
+redirect_type => Art der Weiterleitung
+redirect_permanent => Dauerhaft
+redirect_temporary => Vorübergehend
+search_redirects => Weiterleitungen suchen
+no_redirects_founded => Keine Weiterleitungen gefunden
+redirect_added => Weiterleitung hinzugefügt
+redirect_updated => Weiterleitung aktualisiert
+add_new_redirect => Neue Weiterleitung
+edit_redirect => Weiterleitung bearbeiten
+redirect_deleted => Weiterleitung gelöscht
+redirects_deleted => Weiterleitungen gelöscht
+unable_to_add_new_redirect => Neue Weiterleitung konnte nicht hinzugefügt werden
+error_details_incomplete_no_id => ID# fehlt – die Weiterleitung konnte nicht gespeichert werden
+error_details_incomplete => Angaben unvollständing – die Weiterleitung konnte nicht gespeichert werden
+error_no_such_redirect_id => Eine Weiterleitung mit der ID# existiert nicht. Bitte erneuert versuchen!
+test_redirect => Prüfen
+
+EOT;
+
 if (!defined('txpinterface'))
     @include_once('zem_tpl.php');
 
