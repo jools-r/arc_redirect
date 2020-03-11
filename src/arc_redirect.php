@@ -18,6 +18,13 @@ $plugin['flags'] = '2';
 
 // Plugin 'textpack' is optional. It provides i18n strings to be used in conjunction with gTxt().
 $plugin['textpack'] = <<< EOT
+#@admin
+#@language en
+arc_redirect => Redirects
+tab_arc_redirect => Redirects
+#@language de
+arc_redirect => Weiterleitungen
+tab_arc_redirect => Weiterleitungen
 #@arc_redirect
 #@language en
 arc_redirect => Redirects
