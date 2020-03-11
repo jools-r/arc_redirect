@@ -230,6 +230,7 @@ function arc_redirect_list($message = '')
     			array('class' => 'alert-block information')
     		);
         }
+		echo hed( gTxt('arc_redirect'), '1', ' class="txp-heading"'), $createBlock, $contentBlock;
 	} else {
 		$rs = safe_rows_start(
 			"arc_redirectID, originalUrl, redirectUrl, statusCode", 
